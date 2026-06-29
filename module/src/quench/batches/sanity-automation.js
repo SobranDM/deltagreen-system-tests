@@ -1,6 +1,6 @@
 import {
-  createTestAgent,
   deleteTestActor,
+  lastChatMessageMatching,
   settleAgentSideEffects,
   useQuenchTimeout,
   waitForActorBootstrap,
@@ -9,20 +9,23 @@ import {
   withSetting
 } from '../helpers.js'
 
-async function prepareAgentForSanity (label) {
-  const actor = await createTestAgent(label)
-  await waitForActorBootstrap(actor)
-  await actor.update({
-    'system.sanity.value': 50,
-    'system.sanity.currentBreakingPoint': 30,
-    'system.sanity.adaptations.violence.incident1': false,
-    'system.sanity.adaptations.violence.incident2': false,
-    'system.sanity.adaptations.violence.incident3': false,
-    'system.sanity.adaptations.helplessness.incident1': false,
-    'system.sanity.adaptations.helplessness.incident2': false,
-    'system.sanity.adaptations.helplessness.incident3': false
+async function prepareAgentForSanity (label, { sanity = 50, currentBreakingPoint = 30 } = {}) {
+  const actor = await Actor.create({
+    name: 'Quench ' + label + ' ' + foundry.utils.randomID(),
+    type: 'agent',
+    system: {
+      sanity: {
+        value: sanity,
+        currentBreakingPoint: currentBreakingPoint,
+        adaptations: {
+          violence: { incident1: false, incident2: false, incident3: false },
+          helplessness: { incident1: false, incident2: false, incident3: false }
+        }
+      }
+    }
   })
-  return actor
+  await waitForActorBootstrap(actor)
+  return game.actors.get(actor.id) ?? actor
 }
 
 function messageCount () {
@@ -149,6 +152,9 @@ export default function register (quench) {
             await waitForChatMessage(actor.name, { beforeCount: before })
             await syncActor(actor)
             assert.isAbove(messageCount(), before)
+            assert.isTrue(
+              lastChatMessageMatching(actor.name)?.getFlag('deltagreen', 'chatCard'),
+            )
             assert.deepEqual(violenceIncidents(actor), [false, false, false])
             assert.deepEqual(helplessnessIncidents(actor), [true, false, false])
           } finally {
@@ -213,11 +219,12 @@ export default function register (quench) {
         })
 
         it('dropping to breaking point clears both adaptation tracks', async function () {
-          const actor = await prepareAgentForSanity('san-bp')
+          const actor = await prepareAgentForSanity('san-bp', {
+            sanity: 36,
+            currentBreakingPoint: 35
+          })
           try {
             await actor.update({
-              'system.sanity.value': 36,
-              'system.sanity.currentBreakingPoint': 35,
               'system.sanity.adaptations.violence.incident1': true,
               'system.sanity.adaptations.violence.incident2': true,
               'system.sanity.adaptations.helplessness.incident1': true
@@ -226,9 +233,9 @@ export default function register (quench) {
             await withSanityRollSource(actor, 'violence', async () => {
               await actor.update({ 'system.sanity.value': 34 })
             })
-            await waitForChatMessage(actor.name, { beforeCount: before })
+            await waitForChatMessage('breaking point', { beforeCount: before })
             await syncActor(actor)
-            assert.isAbove(messageCount(), before)
+            assert.equal(messageCount(), before + 1)
             assert.deepEqual(violenceIncidents(actor), [false, false, false])
             assert.deepEqual(helplessnessIncidents(actor), [false, false, false])
             assert.isTrue(actor.system.sanity.breakingPointHit)
@@ -238,20 +245,27 @@ export default function register (quench) {
         })
 
         it('5+ SAN loss crossing breaking point clears both tracks in one update', async function () {
-          const actor = await prepareAgentForSanity('san-temp-and-bp')
+          const actor = await prepareAgentForSanity('san-temp-and-bp', {
+            sanity: 40,
+            currentBreakingPoint: 35
+          })
           try {
             await actor.update({
-              'system.sanity.value': 40,
-              'system.sanity.currentBreakingPoint': 35,
               'system.sanity.adaptations.violence.incident1': true,
               'system.sanity.adaptations.violence.incident2': true,
               'system.sanity.adaptations.helplessness.incident1': true,
               'system.sanity.adaptations.helplessness.incident2': true
             })
+            const before = messageCount()
             await withSanityRollSource(actor, 'violence', async () => {
               await actor.update({ 'system.sanity.value': 34 })
             })
+            await waitForChatMessage('temporarily insane', { beforeCount: before })
             await syncActor(actor)
+            assert.equal(messageCount(), before + 1)
+            const msg = lastChatMessageMatching('temporarily insane')
+            assert.isTrue(msg?.getFlag('deltagreen', 'chatCard'))
+            assert.include(msg.content, 'breaking point')
             assert.deepEqual(violenceIncidents(actor), [false, false, false])
             assert.deepEqual(helplessnessIncidents(actor), [false, false, false])
             assert.isTrue(actor.system.sanity.breakingPointHit)

@@ -19,6 +19,7 @@ import registerSheetsPersistence from './quench/batches/sheets-persistence.js'
 import registerItemsFunctional from './quench/batches/items-functional.js'
 import registerSanityAutomation from './quench/batches/sanity-automation.js'
 import registerSanityGuards from './quench/batches/sanity-guards.js'
+import registerInventory from './quench/batches/inventory.js'
 
 const BATCH_REGISTRARS = [
   registerActorsSmoke,
@@ -41,7 +42,8 @@ const BATCH_REGISTRARS = [
   registerSheetsPersistence,
   registerItemsFunctional,
   registerSanityAutomation,
-  registerSanityGuards
+  registerSanityGuards,
+  registerInventory
 ]
 
 Hooks.on('quenchReady', (quench) => {
