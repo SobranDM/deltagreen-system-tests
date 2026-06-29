@@ -39,6 +39,7 @@ export default function register (quench) {
             'tome-study-san'
           )
           assert.equal(resolveInventoryIconAction(ritualLearned), 'ritual-choice')
+          assert.equal(resolveInventoryIconAction(ritualUnlearned), 'ritual-learn')
           assert.equal(
             resolveInventoryIconAction(ritualLearned, { shiftKey: true }),
             'ritual-perform'
